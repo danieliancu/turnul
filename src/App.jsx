@@ -1,190 +1,85 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Carousel from "./Carousel";
+import Menu from "./Menu"; // Importăm componenta Menu
 
 const App = () => {
-  const [data, setData] = useState(null); // Stochează datele extrase
-  const [error, setError] = useState(""); // Stochează erorile
-  const [activeSource, setActiveSource] = useState(""); // Păstrează sursa activă
+  const [allData, setAllData] = useState([]);
+  const [filteredData, setFilteredData] = useState([]);
+  const [error, setError] = useState("");
+  const [selectedSource, setSelectedSource] = useState("all");
 
-  const handleScrape = async (source) => {
-    setActiveSource(source); // Setează sursa activă
-    setError("");
-    setData(null);
+  const shuffleArray = (array) => array.sort(() => Math.random() - 0.5);
 
-    try {
-      const response = await fetch("http://localhost:5000/scrape", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ source }), // Trimite sursa către backend
-      });
+  useEffect(() => {
+    const fetchAllData = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/articles");
+        const result = await response.json();
 
-      const result = await response.json();
-
-      if (response.ok) {
-        // Filtrează liniile goale consecutive
-        const filteredData = result.data.filter((item, index, array) => {
-          return !(index > 0 && !array[index - 1].href && !item.href);
-        });
-        setData(filteredData); // Stochează rezultatul
-      } else {
-        setError(result.error || "An error occurred");
+        if (response.ok) {
+          const shuffledData = shuffleArray(result.data);
+          setAllData(shuffledData);
+          setFilteredData(shuffledData);
+        } else {
+          setError(result.error || "Failed to fetch data");
+        }
+      } catch (err) {
+        setError("Request failed");
       }
-    } catch (err) {
-      setError("Failed to fetch data");
+    };
+
+    fetchAllData();
+  }, []);
+
+  const handleFilter = (source) => {
+    setSelectedSource(source);
+    if (source === "all") {
+      setFilteredData(allData);
+    } else {
+      const filtered = allData.filter((item) => item.source === source);
+      setFilteredData(filtered);
     }
   };
 
   return (
-    <div style={{ padding: "0px", margin:"0px", fontFamily: "Arial, sans-serif" }}>
-      <h1>Turnul de Veghe</h1>
-      <div style={{
-         marginBottom: "20px",
-         position: "sticky",
-         top: "0",
-         background: "white",
-         boxShadow: "0 3px 3px lightgrey",
-         padding: "20px" 
-         }}
-      >
-        <button
-          onClick={() => handleScrape("g4media")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "g4media" ? "black" : "white",
-            color: activeSource === "g4media" ? "white" : "black",
-          }}
-        >
-          G4Media.ro
-        </button>
+    <div>
+      <Menu
+        selectedSource={selectedSource}
+        handleFilter={handleFilter}
+      />
 
-        <button
-          onClick={() => handleScrape("ziare")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "ziare" ? "black" : "white",
-            color: activeSource === "ziare" ? "white" : "black",
-          }}
-        >
-          Ziare.com
-        </button>
+      {error && (
+        <div style={{ color: "red" }}>
+          <h3>Error:</h3>
+          <p>{error}</p>
+        </div>
+      )}
 
-        <button
-          onClick={() => handleScrape("hotnews")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "hotnews" ? "black" : "white",
-            color: activeSource === "hotnews" ? "white" : "black",
-          }}
-        >
-          HotNews.ro
-        </button>
+      {filteredData.length > 4 && (
+        <div className="container grid-layout">
+          {filteredData.length > 0 && (
+            <div className="carousel-wrapper">
+              <Carousel items={filteredData.slice(0, 4)} />
+            </div>
+          )}
 
-        <button
-          onClick={() => handleScrape("adevarul")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "adevarul" ? "black" : "white",
-            color: activeSource === "adevarul" ? "white" : "black",
-          }}
-        >
-          Adevarul.ro
-        </button>
-   
-
-        <button
-          onClick={() => handleScrape("spotmedia")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "spotmedia" ? "black" : "white",
-            color: activeSource === "spotmedia" ? "white" : "black",
-          }}
-        >
-          SpotMedia.ro
-        </button>
-
-        <button
-          onClick={() => handleScrape("libertatea")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "libertatea" ? "black" : "white",
-            color: activeSource === "libertatea" ? "white" : "black",
-          }}
-        >
-          Libertatea.ro
-        </button>
-
-        <button
-          onClick={() => handleScrape("stirileprotv")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "stirileprotv" ? "black" : "white",
-            color: activeSource === "stirileprotv" ? "white" : "black",
-          }}
-        >
-          Stirileprotv.ro
-        </button>  
-
-        <button
-          onClick={() => handleScrape("digi24")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "digi24" ? "black" : "white",
-            color: activeSource === "digi24" ? "white" : "black",
-          }}
-        >
-          Digi24.ro
-        </button>  
-
-        <button
-          onClick={() => handleScrape("news")}
-          style={{
-            border: "1px solid black",
-            padding: "10px 20px",
-            marginRight: "10px",
-            backgroundColor: activeSource === "news" ? "black" : "white",
-            color: activeSource === "news" ? "white" : "black",
-          }}
-        >
-          News.ro
-        </button>                        
-      </div>
-
-      {data && (
-        <div style={{ marginTop: "20px", color: "green", padding:"20px" }}>
-          {data.map((item, index) => (
-            <div key={index}>
+          {filteredData.slice(4).map((item, index) => (
+            <div className="container-news" key={index}>
+              {item.imgSrc && (
+                <img
+                  src={item.imgSrc}
+                  alt={item.text || "Image"}
+                  className="news-image"
+                />
+              )}
+              <strong className="news-source">{item.source}</strong>
               {item.href && (
                 <a href={item.href} target="_blank" rel="noopener noreferrer">
                   <h3>{item.text}</h3>
                 </a>
               )}
-              {!item.href ? null : <hr />}
             </div>
           ))}
-        </div>
-      )}
-
-      {error && (
-        <div style={{ marginTop: "20px", color: "red" }}>
-          <h3>Error:</h3>
-          <p>{error}</p>
         </div>
       )}
     </div>

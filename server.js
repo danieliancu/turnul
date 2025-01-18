@@ -1,114 +1,188 @@
 import express from "express";
 import cors from "cors";
 import puppeteer from "puppeteer";
+import mysql from "mysql2/promise";
+
+
 
 const app = express();
 const PORT = 5000;
 
-// Middleware pentru gestionarea CORS
-app.use(cors());
+// Configurare middleware CORS
+app.use(cors()); // Permite toate originile
 app.use(express.json());
+
+// Configurarea conexiunii MySQL
+const db = await mysql.createConnection({
+  host: "localhost",
+  user: "root",
+  password: "", // Parola implicită XAMPP este goală
+  database: "scraper_data",
+});
+
+// Crearea tabelei dacă nu există
+await db.execute(`
+  CREATE TABLE IF NOT EXISTS articles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    source VARCHAR(50),
+    text TEXT,
+    href TEXT,
+    imgSrc TEXT
+  )
+`);
 
 // Configurare site-uri și tag-uri
 const sitesConfig = {
   g4media: {
     url: "https://g4media.ro",
-    tags: ["h3"], // Caută doar <h3>
-  },
-  ziare: {
-    url: "https://ziare.com",
-    tags: ["h1", "h2", "h3"], // Caută <h1>, <h2>, <h3>
+    tags: [{ tag: "div.post-review", contentSelector: "h3" }],
   },
   hotnews: {
     url: "https://hotnews.ro",
-    tags: ["h2"], // Caută doar <h2>
+    tags: [{ tag: "article", contentSelector: "h2" }],
   },
-  adevarul: {
-    url: "https://adevarul.ro",
-    tags: ["div.svelte-4dr2hm"], // // Caută după clasa specifica
-  },  
   spotmedia: {
     url: "https://spotmedia.ro",
-    tags: ["div.mbm-h6", "div.mbm-h5"], // Caută după clase specifice
+    tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h5" }],
+    tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h6" }],
+  },
+  ziare: {
+    url: "https://ziare.com",
+    tags: [
+      { tag: "div.spotlight__article", contentSelector: "h1.spotlight__article__title" },
+      { tag: "div.spotlight__article", contentSelector: "h2.spotlight__article__title" },
+      { tag: "div.news__article", contentSelector: "h3.news__article__title" },
+    ],
   },
   digi24: {
     url: "https://digi24.ro",
-    tags: ["h2", "h3"], // Caută <h2> și <h3>
+    tags: [
+      { tag: "article.article-alt", contentSelector: "h3.article-title" },
+      { tag: "article", contentSelector: "h4.article-title" },      
+    ],
   },
   libertatea: {
     url: "https://libertatea.ro",
-    tags: ["h2", "h3"], // Caută <h2> și <h3>
+    tags: [
+      { tag: "div.news-item", contentSelector: "h3.article-title" },
+      { tag: "div.news-item", contentSelector: "h2.article-title" },
+    ],
   },
   stirileprotv: {
     url: "https://stirileprotv.ro",
-    tags: ["h2", "h3"], // Caută după <h2> și <h3>
-  },
+    tags: [{ tag: "article.article", contentSelector: "h3.article-title-daily" }],
+  }, 
   news: {
     url: "https://news.ro",
-    tags: ["h2"], // Caută după <h2> și <h3>
-  },  
+    tags: [{ tag: "article.article", contentSelector: "h2" }],
+  },   
+  gsp: {
+    url: "https://gsp.ro",
+    tags: [{ tag: "div.news-item", contentSelector: "h2" }],
+  },          
+  prosport: {
+    url: "https://prosport.ro",
+    tags: [{ tag: "div.article--wide", contentSelector: "h2.article__title" }],
+  },            
 };
 
-// Funcție pentru scraping tag-uri
-const scrapeTags = async (page, tags) => {
+const scrapeTags = async (page, tags, source) => {
   const results = [];
-  for (const tag of tags) {
+  const seenLinks = new Set();
+
+  for (const { tag, contentSelector } of tags) {
     const elements = await page.$$eval(
       tag,
-      (elements, tagName) =>
+      (elements, contentSelector) =>
         elements.map((el) => {
-          const link = el.querySelector("a");
-          const cleanedText = el.textContent
-            .trim()
-            .replace(/\b\d{2}:\d{2}\b/, "") // Elimină orele din text (ex. "14:41")
-            .replace(/\s*\d+$/, "") // Elimină cifrele de la sfârșitul textului (ex. "titlu 22")
-            .replace(/^-+\s*/, ""); // Elimină liniile doar de la începutul textului (ex. "- titlu")
+          const imgElement = el.querySelector("img");
+          const imgSrc =
+            imgElement?.getAttribute("data-src") ||
+            imgElement?.getAttribute("srcset")?.split(",")[0]?.split(" ")[0] ||
+            imgElement?.src ||
+            null;
+          const contentElement = el.querySelector(contentSelector);
+          const link = contentElement ? contentElement.querySelector("a") : null;
           return {
-            tag: tagName,
-            text: cleanedText,
+            imgSrc: imgSrc,
+            text: contentElement ? contentElement.textContent.trim() : null,
             href: link ? link.href : null,
           };
         }),
-      tag
+      contentSelector
     );
-    results.push(...elements);
+
+    elements.forEach((element) => {
+      if (element.href && !seenLinks.has(element.href)) {
+        seenLinks.add(element.href);
+        results.push({ ...element, source });
+      }
+    });
   }
   return results;
 };
 
 
 
-
-// Endpoint pentru scraping
-app.post("/scrape", async (req, res) => {
-  const { source } = req.body;
-
-  if (!source || !sitesConfig[source]) {
-    return res.status(400).json({ error: "Invalid or missing source" });
-  }
-
-  const { url, tags } = sitesConfig[source];
-
+app.get("/scrape-all", async (req, res) => {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2" }); // Așteaptă complet încărcarea paginii
 
-    // Scrapează tag-urile configurate
-    const data = await scrapeTags(page, tags);
+    for (const source in sitesConfig) {
+      const { url, tags } = sitesConfig[source];
+      try {
+        const page = await browser.newPage();
+        await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+        const data = await scrapeTags(page, tags, source);
+
+        // Salvează fiecare articol în baza de date
+        for (const item of data) {
+          // Verifică dacă articolul există deja în baza de date (pe baza href, de exemplu)
+          const [existing] = await db.execute(
+            `SELECT id FROM articles WHERE href = ?`,
+            [item.href]
+          );
+
+          if (existing.length === 0) {
+            // Dacă nu există, inserează articolul
+            await db.execute(
+              `INSERT INTO articles (source, text, href, imgSrc) VALUES (?, ?, ?, ?)`,
+              [item.source, item.text, item.href, item.imgSrc]
+            );
+          }
+        }
+
+
+        await page.close();
+      } catch (error) {
+        console.error(`Failed to scrape source: ${source}. Error: ${error.message}`);
+      }
+    }
 
     await browser.close();
-
-    // Trimite datele către client
-    res.json({ data });
+    res.json({ message: "Scraping completed and data saved to MySQL" });
   } catch (error) {
-    console.error("Error scraping the page:", error);
-    res.status(500).json({ error: "Failed to scrape the page" });
+    console.error("Error in scrape-all:", error);
+    res.status(500).json({ error: "Failed to scrape all sources" });
   }
 });
+
+
+app.get("/articles", async (req, res) => {
+  try {
+    const [rows] = await db.execute("SELECT * FROM articles"); // Preia toate articolele din baza de date
+    res.json({ data: rows }); // Trimite datele către client
+  } catch (error) {
+    console.error("Error fetching articles:", error);
+    res.status(500).json({ error: "Failed to fetch articles" });
+  }
+});
+
+
+
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
