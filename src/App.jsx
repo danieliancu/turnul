@@ -14,8 +14,10 @@ const App = () => {
     const fetchAllData = async () => {
       try {
         // productie:
-        const response = await fetch("/api/articles");
-        // const response = await fetch("http://localhost:5000/articles");
+        // const response = await fetch("/api/articles");
+
+        // local:
+        const response = await fetch("http://localhost:5000/articles");
         const result = await response.json();
 
         if (response.ok) {

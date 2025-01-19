@@ -7,44 +7,49 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Configurare middleware CORS și parsare JSON
 app.use(cors());
 app.use(express.json());
 
-// Configurarea conexiunii MySQL (diferă între local și Vercel)
+// Configurarea conexiunii MySQL
 let db;
-if (process.env.VERCEL_ENV) {
-  // Conexiune pentru Vercel
-  db = await mysql.createConnection({
-    host: process.env.MYSQL_ADDON_HOST,
-    user: process.env.MYSQL_ADDON_USER,
-    password: process.env.MYSQL_ADDON_PASSWORD,
-    database: process.env.MYSQL_ADDON_DB,
-    port: process.env.MYSQL_ADDON_PORT,
-  });
-} else {
-  // Conexiune locală
-  db = await mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "scraper_data",
-  });
-}
+(async () => {
+  try {
+    if (process.env.VERCEL_ENV) {
+      // Configurare pentru Vercel
+      db = await mysql.createConnection({
+        host: process.env.MYSQL_ADDON_HOST,
+        user: process.env.MYSQL_ADDON_USER,
+        password: process.env.MYSQL_ADDON_PASSWORD,
+        database: process.env.MYSQL_ADDON_DB,
+        port: process.env.MYSQL_ADDON_PORT,
+      });
+    } else {
+      // Configurare locală
+      db = await mysql.createConnection({
+        host: "localhost",
+        user: "root",
+        password: "",
+        database: "scraper_data",
+      });
+    }
 
-// Crearea tabelei dacă nu există
-await db.execute(`
-  CREATE TABLE IF NOT EXISTS articles (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    source VARCHAR(50),
-    text TEXT,
-    href TEXT,
-    imgSrc TEXT
-  )
-`);
+    // Crearea tabelei dacă nu există
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS articles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        source VARCHAR(50),
+        text TEXT,
+        href TEXT,
+        imgSrc TEXT
+      )
+    `);
+    console.log("Database connected and table ensured.");
+  } catch (error) {
+    console.error("Error connecting to database:", error);
+  }
+})();
 
+// Configurare site-uri și tag-uri
 // Configurare site-uri și tag-uri
 const sitesConfig = {
   g4media: {
@@ -162,7 +167,6 @@ app.get("/scrape-all", async (req, res) => {
           );
 
           if (existing.length === 0) {
-            console.log(`Inserting article: ${item.text}`);
             await db.execute(
               "INSERT INTO articles (source, text, href, imgSrc) VALUES (?, ?, ?, ?)",
               [item.source, item.text, item.href, item.imgSrc]
@@ -197,10 +201,3 @@ app.get("/articles", async (req, res) => {
 
 // Exportă aplicația pentru Vercel
 export default app;
-
-// Pornește serverul pe local
-if (!process.env.VERCEL_ENV) {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}

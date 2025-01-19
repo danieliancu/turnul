@@ -208,4 +208,21 @@ button {
   .slick-list {
     max-width:300px;
   }
+  .container img {
+    width:30%;
+    height:100%;
+    border-radius: 0;
+    float:left;
+    margin-right: 10px !important;
+  }  
+  .container-news {
+    padding:10px;
+    overflow:hidden;
+  }
+  .slick-dots {
+    display: none !important;
+  }
+  .container-news strong {
+    padding:0;
+  }
 }
