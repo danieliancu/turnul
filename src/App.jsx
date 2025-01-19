@@ -14,6 +14,7 @@ const App = () => {
     const fetchAllData = async () => {
       try {
         const response = await fetch("http://localhost:5000/articles");
+        // const response = await fetch("https://turnul.ro/articles");        
         const result = await response.json();
 
         if (response.ok) {
@@ -34,12 +35,13 @@ const App = () => {
   const handleFilter = (source) => {
     setSelectedSource(source);
     if (source === "all") {
-      setFilteredData(allData);
+      setFilteredData([...allData]); // Creează un array nou
     } else {
       const filtered = allData.filter((item) => item.source === source);
-      setFilteredData(filtered);
+      setFilteredData([...filtered]); // Creează un array nou
     }
   };
+  
 
   return (
     <div>
@@ -55,11 +57,15 @@ const App = () => {
         </div>
       )}
 
+
+
       {filteredData.length > 4 && (
         <div className="container grid-layout">
+    {console.log("Filtered data for Carousel:", filteredData.slice(0, 4))}
+
           {filteredData.length > 0 && (
             <div className="carousel-wrapper">
-              <Carousel items={filteredData.slice(0, 4)} />
+              <Carousel key={selectedSource} items={filteredData.slice(0, 4)} />
             </div>
           )}
 

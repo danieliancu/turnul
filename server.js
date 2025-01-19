@@ -97,10 +97,12 @@ const scrapeTags = async (page, tags, source) => {
         elements.map((el) => {
           const imgElement = el.querySelector("img");
           const imgSrc =
-            imgElement?.getAttribute("data-src") ||
-            imgElement?.getAttribute("srcset")?.split(",")[0]?.split(" ")[0] ||
-            imgElement?.src ||
-            null;
+          imgElement?.getAttribute("data-src") ||
+          imgElement?.getAttribute("srcset")?.split(",")[0]?.split(" ")[0] ||
+          imgElement?.style?.backgroundImage?.replace(/url\(["']?/, "").replace(/["']?\)/, "") ||
+          imgElement?.src ||
+          null;
+        
           const contentElement = el.querySelector(contentSelector);
           const link = contentElement ? contentElement.querySelector("a") : null;
           return {
