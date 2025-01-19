@@ -2,23 +2,37 @@ import express from "express";
 import cors from "cors";
 import puppeteer from "puppeteer";
 import mysql from "mysql2/promise";
+import dotenv from "dotenv";
 
-
+dotenv.config();
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
-// Configurare middleware CORS
-app.use(cors()); // Permite toate originile
+// Configurare middleware CORS și parsare JSON
+app.use(cors());
 app.use(express.json());
 
-// Configurarea conexiunii MySQL
-const db = await mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "", // Parola implicită XAMPP este goală
-  database: "scraper_data",
-});
+// Configurarea conexiunii MySQL (diferă între local și Vercel)
+let db;
+if (process.env.VERCEL_ENV) {
+  // Conexiune pentru Vercel
+  db = await mysql.createConnection({
+    host: process.env.MYSQL_ADDON_HOST,
+    user: process.env.MYSQL_ADDON_USER,
+    password: process.env.MYSQL_ADDON_PASSWORD,
+    database: process.env.MYSQL_ADDON_DB,
+    port: process.env.MYSQL_ADDON_PORT,
+  });
+} else {
+  // Conexiune locală
+  db = await mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "scraper_data",
+  });
+}
 
 // Crearea tabelei dacă nu există
 await db.execute(`
@@ -44,7 +58,6 @@ const sitesConfig = {
   spotmedia: {
     url: "https://spotmedia.ro",
     tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h5" }],
-    tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h6" }],
   },
   ziare: {
     url: "https://ziare.com",
@@ -54,38 +67,9 @@ const sitesConfig = {
       { tag: "div.news__article", contentSelector: "h3.news__article__title" },
     ],
   },
-  digi24: {
-    url: "https://digi24.ro",
-    tags: [
-      { tag: "article.article-alt", contentSelector: "h3.article-title" },
-      { tag: "article", contentSelector: "h4.article-title" },      
-    ],
-  },
-  libertatea: {
-    url: "https://libertatea.ro",
-    tags: [
-      { tag: "div.news-item", contentSelector: "h3.article-title" },
-      { tag: "div.news-item", contentSelector: "h2.article-title" },
-    ],
-  },
-  stirileprotv: {
-    url: "https://stirileprotv.ro",
-    tags: [{ tag: "article.article", contentSelector: "h3.article-title-daily" }],
-  }, 
-  news: {
-    url: "https://news.ro",
-    tags: [{ tag: "article.article", contentSelector: "h2" }],
-  },   
-  gsp: {
-    url: "https://gsp.ro",
-    tags: [{ tag: "div.news-item", contentSelector: "h2" }],
-  },          
-  prosport: {
-    url: "https://prosport.ro",
-    tags: [{ tag: "div.article--wide", contentSelector: "h2.article__title" }],
-  },            
 };
 
+// Funcție pentru scraping
 const scrapeTags = async (page, tags, source) => {
   const results = [];
   const seenLinks = new Set();
@@ -97,14 +81,13 @@ const scrapeTags = async (page, tags, source) => {
         elements.map((el) => {
           const imgElement = el.querySelector("img");
           const imgSrc =
-          imgElement?.getAttribute("data-src") ||
-          imgElement?.getAttribute("srcset")?.split(",")[0]?.split(" ")[0] ||
-          imgElement?.style?.backgroundImage?.replace(/url\(["']?/, "").replace(/["']?\)/, "") ||
-          imgElement?.src ||
-          null;
-        
+            imgElement?.getAttribute("data-src") ||
+            imgElement?.src ||
+            null;
+
           const contentElement = el.querySelector(contentSelector);
           const link = contentElement ? contentElement.querySelector("a") : null;
+
           return {
             imgSrc: imgSrc,
             text: contentElement ? contentElement.textContent.trim() : null,
@@ -124,43 +107,39 @@ const scrapeTags = async (page, tags, source) => {
   return results;
 };
 
-
-
+// Endpoint pentru scraping
 app.get("/scrape-all", async (req, res) => {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
     for (const source in sitesConfig) {
       const { url, tags } = sitesConfig[source];
       try {
         const page = await browser.newPage();
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+        await page.goto(url, { waitUntil: "domcontentloaded" });
         const data = await scrapeTags(page, tags, source);
 
-        // Salvează fiecare articol în baza de date
+        // Salvează datele în baza de date
         for (const item of data) {
-          // Verifică dacă articolul există deja în baza de date (pe baza href, de exemplu)
           const [existing] = await db.execute(
-            `SELECT id FROM articles WHERE href = ?`,
+            "SELECT id FROM articles WHERE href = ?",
             [item.href]
           );
 
           if (existing.length === 0) {
-            // Dacă nu există, inserează articolul
             await db.execute(
-              `INSERT INTO articles (source, text, href, imgSrc) VALUES (?, ?, ?, ?)`,
+              "INSERT INTO articles (source, text, href, imgSrc) VALUES (?, ?, ?, ?)",
               [item.source, item.text, item.href, item.imgSrc]
             );
           }
         }
 
-
         await page.close();
       } catch (error) {
-        console.error(`Failed to scrape source: ${source}. Error: ${error.message}`);
+        console.error(`Failed to scrape source: ${source}`, error);
       }
     }
 
@@ -168,24 +147,27 @@ app.get("/scrape-all", async (req, res) => {
     res.json({ message: "Scraping completed and data saved to MySQL" });
   } catch (error) {
     console.error("Error in scrape-all:", error);
-    res.status(500).json({ error: "Failed to scrape all sources" });
+    res.status(500).json({ error: "Scraping failed" });
   }
 });
 
-
+// Endpoint pentru articole
 app.get("/articles", async (req, res) => {
   try {
-    const [rows] = await db.execute("SELECT * FROM articles"); // Preia toate articolele din baza de date
-    res.json({ data: rows }); // Trimite datele către client
+    const [rows] = await db.execute("SELECT * FROM articles");
+    res.json({ data: rows });
   } catch (error) {
     console.error("Error fetching articles:", error);
     res.status(500).json({ error: "Failed to fetch articles" });
   }
 });
 
+// Exportă aplicația pentru Vercel
+export default app;
 
-
-
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+// Pornește serverul pe local
+if (!process.env.VERCEL_ENV) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
