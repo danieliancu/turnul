@@ -67,7 +67,7 @@ const Carousel = ({ items }) => {
                     <strong style={{ display: "block", fontSize: "16px" }}>
                       {item.source}
                     </strong>
-                    <h3 style={{ margin: "5px 0", fontSize: "20px" }}>
+                    <h3 style={{ margin: "5px 0" }}>
                       {item.text}
                     </h3>
                   </a>

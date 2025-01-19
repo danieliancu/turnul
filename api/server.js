@@ -58,6 +58,7 @@ const sitesConfig = {
   spotmedia: {
     url: "https://spotmedia.ro",
     tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h5" }],
+    tags: [{ tag: "div.jet-smart-listing__post", contentSelector: "div.mbm-h6" }],
   },
   ziare: {
     url: "https://ziare.com",
@@ -67,6 +68,36 @@ const sitesConfig = {
       { tag: "div.news__article", contentSelector: "h3.news__article__title" },
     ],
   },
+  digi24: {
+    url: "https://digi24.ro",
+    tags: [
+      { tag: "article.article-alt", contentSelector: "h3.article-title" },
+      { tag: "article", contentSelector: "h4.article-title" },      
+    ],
+  },
+  libertatea: {
+    url: "https://libertatea.ro",
+    tags: [
+      { tag: "div.news-item", contentSelector: "h3.article-title" },
+      { tag: "div.news-item", contentSelector: "h2.article-title" },
+    ],
+  },
+  stirileprotv: {
+    url: "https://stirileprotv.ro",
+    tags: [{ tag: "article.article", contentSelector: "h3.article-title-daily" }],
+  }, 
+  news: {
+    url: "https://news.ro",
+    tags: [{ tag: "article.article", contentSelector: "h2" }],
+  },   
+  gsp: {
+    url: "https://gsp.ro",
+    tags: [{ tag: "div.news-item", contentSelector: "h2" }],
+  },          
+  prosport: {
+    url: "https://prosport.ro",
+    tags: [{ tag: "div.article--wide", contentSelector: "h2.article__title" }],
+  },            
 };
 
 // Funcție pentru scraping

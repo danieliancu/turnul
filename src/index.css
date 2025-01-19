@@ -188,7 +188,8 @@ button {
 
 .slick-art h3 {
   font-size:24px;
-  line-height:28px;
+  line-height:30px;
+  font-weight: 500;
 }
 
 .slick-prev, .slick-next {
