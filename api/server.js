@@ -140,6 +140,7 @@ const scrapeTags = async (page, tags, source) => {
 
 // Endpoint pentru scraping
 app.get("/scrape-all", async (req, res) => {
+  console.log("Scrape-all endpoint accessed");
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -161,6 +162,7 @@ app.get("/scrape-all", async (req, res) => {
           );
 
           if (existing.length === 0) {
+            console.log(`Inserting article: ${item.text}`);
             await db.execute(
               "INSERT INTO articles (source, text, href, imgSrc) VALUES (?, ?, ?, ?)",
               [item.source, item.text, item.href, item.imgSrc]
